@@ -1,0 +1,14 @@
+en:
+  lita:
+    handlers:
+      interrupt:
+        error:
+          exception: |-
+            :failed: Exception in handler %{handler}:
+            %{message}
+          bad_policy_ref: "Policy %{name} no longer defined in PagerDuty"
+          no_policy: "Policy %{name} not found -- did you alias it yet?"
+        help:
+          call:
+            syntax: 'call <NAME> [MESSAGE]'
+            desc: 'Notify the recipient with an optional message via PagerDuty'
