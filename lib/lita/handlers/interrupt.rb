@@ -6,25 +6,23 @@ module Lita
       config :pagerduty_token, required: true, type: String # Auth token
       config :pagerduty_from, required: true, type: String  # Email address that creates incidents
 
+      NAMED_POLICY = 'named_policy'.freeze
+      USER_IDENTITY = 'user_identity'.freeze
+
+      EVENTS_API_V2_INBOUND_REF = 'events_api_v2_inbound_integration_reference'.freeze
+
       include ::InterruptHelper::PagerDuty
 
       route(
-        /^call\s+(?<policy>\S+)(?:\s+(?<message>.+))?\s*$/,
+        /^call\s+(?<alias_id>\S+)(?:\s+(?<message>.+))?\s*$/,
         :call_policy,
         command: true,
         help: { t('help.call.syntax') => t('help.call.desc') }
       )
 
       route(
-        /^int\s+alias\s+(?<name>\S+)\s+(?<policy_id>\S+)\s+(?<service_id>\S+)\s*$/,
-        :alias_policy,
-        restrict_to: %i[pagerduty_admins],
-        command: true
-      )
-
-      route(
-        /^int\s+policies(\s+(?<query>.+))?\s*$/,
-        :list_policies,
+        /^int\s+alias\s+(?<alias_id>\S+)\s+(?<service_id>\S+)\s*$/,
+        :alias_service,
         command: true
       )
 
@@ -36,66 +34,89 @@ module Lita
 
       # @param [Lita::Response] response
       def call_policy(response)
-        policy_name = response.match_data['policy'].strip.downcase
-        stored_policy = redis.hget('named_policy', policy_name)
-        return response.reply(t('error.no_policy', name: policy_name)) unless stored_policy
-        policy_id, service_id = stored_policy.split "\x00"
-
-        policy = pagerduty.get("escalation_policies/#{policy_id}")
-        return response.reply(t('error.bad_policy_ref', name: policy_name)) unless policy
+        alias_id = response.match_data['alias_id'].downcase
+        integration_key = redis.hget(NAMED_POLICY, alias_id)
+        return response.reply(t('error.no_alias', name: alias_id)) unless integration_key
 
         sender_note = "by #{response.user.name} "
         room = Lita::Room.find_by_id(response.message.source.room_object.id)
         room_note = ''
-        room_note = "from #{room.name}" unless room.nil?
-        title = "Incident initiated #{sender_note}#{room_note}".strip
-        message = (response.match_data['message'] || '').strip
+        room_note = "in ##{room.name}" unless room.nil?
+        message = (response.match_data['message'] || "Your presence has been requested by #{sender_note}#{room_note}.").strip
+        source = (room.nil? ? 'Slack' : "##{room.name}")
 
         request = {
-          type: 'incident',
-          title: title,
-          service: {
-            type: "service_reference",
-            id: service_id
-          },
-          escalation_policy: {
-            type: "escalation_policy_reference",
-            id: policy_id
+          routing_key: integration_key,
+          event_action: 'trigger',
+          payload: {
+            summary: message,
+            source: source,
+            severity: 'critical',
+            component: 'human',
+            group: 'oncall',
+            class: 'notification'
           }
         }
 
-        unless message.empty?
-          request[:body] = {
-            type: 'incident_body',
-            details: message
-          }
+        events_v2.post do |req|
+          req.url = 'enqueue'
+          req.body = request
         end
 
-        incident = pagerduty.post(
-          'incidents',
-          body: { incident: request },
-          headers: { from: config.pagerduty_from }
-        )
-        return response.reply('Unable to create incident') unless incident
-        incident = incident['incident']
+        response.reply('Recipient has been notified')
 
-        response.reply(":successful: Created incident `#{incident['id']}` - #{incident['html_url']}")
+        #
+        # request = {
+        #   type: 'incident',
+        #   title: title,
+        #   service: {
+        #     type: "service_reference",
+        #     id: service_id
+        #   },
+        #   escalation_policy: {
+        #     type: "escalation_policy_reference",
+        #     id: policy_id
+        #   }
+        # }
+        #
+        # unless message.empty?
+        #   request[:body] = {
+        #     type: 'incident_body',
+        #     details: message
+        #   }
+        # end
+        #
+        # incident = pagerduty.post(
+        #   'incidents',
+        #   body: { incident: request },
+        #   headers: { from: config.pagerduty_from }
+        # )
+        # return response.reply('Unable to create incident') unless incident
+        # incident = incident['incident']
+        #
+        # response.reply(":successful: Created incident `#{incident['id']}` - #{incident['html_url']}")
       rescue Exception => ex
         log.warn("Exception occurred: #{ex.message}:\n#{ex.backtrace.join("\n")}")
         response.reply(t('error.exception', handler: __callee__, message: ex.message))
       end
 
-      # @param [Lita::Response] response
-      def list_policies(response)
-        query = response.match_data['query']&.strip
-        params = {}
-        params[:query] = query if query && !query.empty?
-        results = pagerduty.get('escalation_policies', query_params: params)
-        return response.reply('No policies found') if results.empty?
-        items = results['escalation_policies'].map do |p|
-          "- *#{p['name']}* - `#{p['id']}`"
-        end
-        response.reply(items.join("\n"))
+      def get_events_api_integration(service_id)
+        service = pagerduty.get("services/#{service_id}")['service']
+        return nil unless service
+        int_ref = service['integrations'].select { |i| i['type'] == EVENTS_API_V2_INBOUND_REF }.first
+        return nil unless int
+        pagerduty.get("services/#{service_id}/integrations/#{int_ref['id']}")['integration']
+      end
+
+      def alias_service(response)
+        alias_id = response.match_data['alias_id'].downcase
+        service_id = response.match_data['service_id']
+
+        key = (get_events_api_integration(service_id) || {})['integration_key'] || ''
+        return response.reply('No Events v2 API integration key found for service') if key.empty?
+
+        redis.hset(NAMED_POLICY, alias_id, key)
+        response.reply('OK')
       rescue Exception => ex
         log.warn("Exception occurred: #{ex.message}:\n#{ex.backtrace.join("\n")}")
         response.reply(t('error.exception', handler: __callee__, message: ex.message))
@@ -107,31 +128,17 @@ module Lita
         params = {}
         params[:query] = query if query && !query.empty?
         results = pagerduty.get('services', query_params: params)
-        return response.reply('No services found') if results.empty?
-        items = results['services'].map do |p|
-          "- *#{p['name']}* - `#{p['id']}`"
+
+        # Only list Events API 2-integrated services
+        services = (results['services'] || []).select do |svc|
+          (svc['integrations'] || []).any? { |i| i['type'] == EVENTS_API_V2_INBOUND_REF }
         end
+        return response.reply('No services found') if services.empty?
+
+        items = services.map { |svc| "- *#{svc['name']}* - `#{svc['id']}`" }
         response.reply(items.join("\n"))
       rescue Exception => ex
         log.warn("Exception occurred: #{ex.message}:\n#{ex.backtrace.join("\n")}")
-        response.reply(t('error.exception', handler: __callee__, message: ex.message))
-      end
-
-      # @param [Lita::Response] response
-      def alias_policy(response)
-        name = response.match_data['name'].downcase
-
-        policy_id = response.match_data['policy_id']
-        policy = pagerduty.get("escalation_policies/#{policy_id}")
-        raise "policy #{policy_id} not found" unless policy
-
-        service_id = response.match_data['service_id']
-        service = pagerduty.get("services/#{service_id}")
-        raise "service #{service_id} not found" unless service
-
-        redis.hset('named_policy', name, [policy_id, service_id].join("\x00"))
-        response.reply(":successful: Created policy mapping #{name} to #{policy['escalation_policy']['name']}")
-      rescue Exception => ex
         response.reply(t('error.exception', handler: __callee__, message: ex.message))
       end
 

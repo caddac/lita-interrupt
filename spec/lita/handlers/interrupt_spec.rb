@@ -7,19 +7,15 @@ describe Lita::Handlers::Interrupt, lita_handler: true do
 
   {
     # :method => [MESSAGE, ...]
-    :list_policies => [
-      'int policies',
-      'int policies query text'
-    ],
 
     :list_services => [
       'int services',
       'int services query text'
     ],
 
-    :alias_policy => [
-      'int alias name policyid serviceid',
-      'int   alias   name    policyid serviceid'
+    :alias_service => [
+      'int alias name serviceid',
+      'int   alias   name     serviceid'
     ],
 
     :call_policy => [
