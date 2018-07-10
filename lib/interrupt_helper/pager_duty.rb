@@ -4,8 +4,11 @@ require 'pager_duty/connection'
 
 module InterruptHelper
   module PagerDuty
-    def pagerduty
-      @pagerduty_client ||= ::PagerDuty::Connection.new(config.pagerduty_token)
+    def pagerduty(token)
+      @pagerduty_clients ||= Hash.new { |h, k|
+        h[k] = ::PagerDuty::Connection.new(k)
+      }
+      @pagerduty_clients[token]
     end
 
     # @return [::Faraday]

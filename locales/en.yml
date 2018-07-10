@@ -2,13 +2,50 @@ en:
   lita:
     handlers:
       interrupt:
-        error:
-          exception: |-
-            :failed: Exception in handler %{handler}:
-            %{message}
-          bad_policy_ref: "Policy %{name} no longer defined in PagerDuty"
-          no_policy: "Policy %{name} not found -- did you alias it yet?"
+        team_ls:
+          no_teams: "No teams are configured."
+          entry: "• `%{team_id}`"
+        service_ls:
+          no_services: ":failed: No services found."
+          no_team: ":failed: Team %{team_id} not found."
+          api_error: ":failed: Unable to look up services: %{message}"
+          entry: "• `%{service_id}` - _%{service_name}_"
+          team: "*%{team_id}*"
+        alias_new:
+          no_integration: ":failed: Service `%{service_id}` does not exist or does not have an Events v2 integration named `%{integration_name}`."
+          no_team: ":failed: Team %{team_id} not found."
+          ok: ":success: Alias %{id} created."
+        alias_rm:
+          no_alias: ":failed: Alias %{id} not found."
+          ok: ":success: Alias %{id} deleted."
+        alias_ls:
+          entry: "• `%{alias_id}` → %{service_name} (%{team_id})"
+          no_aliases: "No aliases defined."
+        call:
+          no_alias: ":failed: No alias found with the name %{name}"
+          api_error: ":failed: Unable to call %{id}: %{message}"
+          ok: ":notify: %{name} notified."
+
+        exception: |-
+          :failed: Exception in handler %{handler} (%{class}):
+          %{message}
+
         help:
           call:
             syntax: 'call <NAME> [MESSAGE]'
-            desc: 'Notify the recipient with an optional message via PagerDuty'
+            desc: 'Notify the recipient with an optional message via PagerDuty.'
+          team_ls:
+            syntax: 'int team ls'
+            desc: 'List team names.'
+          alias_new:
+            syntax: 'int alias new <NAME> <TEAM> <SERVICE-ID>'
+            desc: 'Create a service call alias (requires the service to have a correctly-named Events v2 integration).'
+          alias_ls:
+            syntax: 'int alias ls | who can i call'
+            desc: 'List aliases.'
+          alias_rm:
+            syntax: 'int alias rm <NAME>'
+            desc: 'Delete an existing service alias.'
+          service_ls:
+            syntax: 'int service ls [TEAM [QUERY]]'
+            desc: 'List services, optionally filtering them by team and with a query (by title).'
