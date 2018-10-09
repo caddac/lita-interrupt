@@ -5,6 +5,8 @@ require 'pager_duty/connection'
 module InterruptHelper
   module PagerDuty
     def pagerduty(token)
+      token = token.to_s
+      return nil if token.empty?
       @pagerduty_clients ||= Hash.new { |h, k|
         h[k] = ::PagerDuty::Connection.new(k)
       }

@@ -162,21 +162,27 @@ module Lita
 
       # @param [Lita::Response] response
       def list_services(response)
-        team_id = response.match_data['team_id']
-        unless team_id.nil? || team_id.empty?
-          response.reply(list_team_services(team_id, response).join("\n"))
-          return
-        end
+        query = response.match_data['query'].to_s.strip
+        team_id = response.match_data['team_id'].to_s
+        team_ids = case team_id
+                   when "" then config.pagerduty_teams.keys.sort
+                   else [team_id]
+                   end
 
         response.reply(
-          config.pagerduty_teams.keys.sort.flat_map do |team_id|
-            [
-              t('service_ls.team', team_id: team_id),
-              *list_team_services(team_id, response)
-            ]
+          team_ids.flat_map do |team_id; services|
+            services = list_team_services(team_id, query)
+            header = t('service_ls.team', team_id: team_id)
+            case services
+            when nil
+              break [t('service_ls.no_team', team_id: team_id)]
+            when []
+              [header, t('service_ls.no_services')]
+            else
+              [header, *services]
+            end
           end.join("\n")
         )
-
       rescue APIError => ae
         log_exception(__callee__, ex)
         response.reply(t('call.api_error', id: alias_id, message: ae.message))
@@ -184,16 +190,12 @@ module Lita
         send_exception(response, __callee__, ex)
       end
 
-      def list_team_services(team_id, response)
+      def list_team_services(team_id, query)
         pd = team(team_id)
-        if pd.nil?
-          response.reply(t('service_ls.no_team', team_id: team_id))
-          return
-        end
+        return nil if pd.nil?
 
-        query = (response.match_data['query'] || '').strip
         params = {
-          query: query || '',
+          query: query,
           include: %w[integrations]
         }
 
@@ -203,7 +205,6 @@ module Lita
         services = (results['services'] || []).select do |svc|
           (svc['integrations'] || []).any? { |i| is_suitable_integration?(i) }
         end
-        return response.reply(t('service_ls.no_services')) if services.empty?
 
         services.sort_by { |svc| svc['name'] }.map { |svc|
           t('service_ls.entry', service_name: svc['name'], service_id: svc['id'])
