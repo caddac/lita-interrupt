@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = 'lita-interrupt'
-  spec.version       = '0.1.0'
+  spec.version       = '0.1.1'
   spec.authors       = ['Noel Cower']
   spec.email         = ['ncower@gmail.com']
   spec.description   = 'lita-interrupt interrupts a user by assigning them to a new incident in PagerDuty'
@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
 
   spec.required_ruby_version = '~> 2.3'
 
-  spec.add_runtime_dependency 'lita', '>= 4.7'
+  spec.add_runtime_dependency 'lita', '~> 4.7'
   spec.add_runtime_dependency 'pager_duty-connection', '~> 1.0'
 
   spec.add_development_dependency 'bundler', '~> 1.3'
