@@ -1,7 +1,7 @@
 # lita-interrupt
 
-[![Build Status](https://travis-ci.org/nilium/lita-interrupt.png?branch=master)](https://travis-ci.org/nilium/lita-interrupt)
-[![Coverage Status](https://coveralls.io/repos/nilium/lita-interrupt/badge.png)](https://coveralls.io/r/nilium/lita-interrupt)
+[![CircleCI](https://circleci.com/gh/nilium/lita-interrupt/tree/master.svg?style=svg)](https://circleci.com/gh/nilium/lita-interrupt/tree/master)
+[![codecov](https://codecov.io/gh/nilium/lita-interrupt/branch/master/graph/badge.svg)](https://codecov.io/gh/nilium/lita-interrupt)
 
 lita-interrupt is a plugin that enables paging of individual services in
 PagerDuty using an alias. It is primarily intended for use in on-call situations
